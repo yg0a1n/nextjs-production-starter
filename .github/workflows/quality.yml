@@ -11,6 +11,9 @@ on:
   pull_request:
   push:
     branches: [main]
+  # Appele par deploy.yml : la mise en production attend ces controles, sur le meme commit.
+  # Jamais `workflow_run` : il s'executerait avec les secrets du depot de base apres une PR de fork.
+  workflow_call:
 
 # Moindre privilege : ce workflow ne fait que lire le code.
 permissions:
