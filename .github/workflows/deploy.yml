@@ -1,0 +1,62 @@
+name: deploy
+
+# Mise en production sur Vercel : le SEUL chemin de deploiement de ce depot.
+#
+# Objectif     : publier chaque commit de main, apres les controles de quality.yml sur ce commit.
+# Proprietaire : agent-os.
+# Perimetre    : projet Vercel nextjs-production-starter (prj_UVUFEgB7RqWUkBu6h0pOymh7ysMZ).
+# Activation   : push sur main, ou lancement manuel (limite a main par l'environnement « production »).
+# Absence      : plus aucune mise en ligne, sans alerte. L'integration Git de Vercel est deconnectee
+#                expres : le depot recoit des commits d'agents.
+# Suppression  : seulement si un autre chemin de deploiement le remplace.
+#
+# SECURITE — depot public :
+# - aucun declencheur pull_request, pull_request_target ni workflow_run ;
+# - VERCEL_TOKEN est un secret de l'ENVIRONNEMENT « production » (regle de branche : main),
+#   jeton dedie a ce depot et a duree limitee, lu par la CLI depuis l'environnement, jamais en argument ;
+# - le job qui detient le jeton n'execute aucun code du depot : ni install, ni build local,
+#   ni `vercel pull` (le build se fait chez Vercel) ; pas de --debug (les journaux sont publics).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# File d'attente, jamais d'annulation : un build annule cote runner continue chez Vercel et
+# pourrait reprendre l'alias de production apres un deploiement plus recent.
+concurrency:
+  group: vercel-prod
+  cancel-in-progress: false
+
+jobs:
+  quality:
+    uses: ./.github/workflows/quality.yml
+
+  deploy:
+    needs: quality
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    env:
+      VERCEL_ORG_ID: team_3yiVa4vQ76iXUSYIgM7syHHH
+      VERCEL_PROJECT_ID: prj_UVUFEgB7RqWUkBu6h0pOymh7ysMZ
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@61.0.0
+
+      - name: Deploy to production (build chez Vercel)
+        run: vercel deploy --prod --yes
