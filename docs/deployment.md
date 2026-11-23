@@ -116,10 +116,39 @@ step.
 
 ## Vercel
 
-1. Create an account on [vercel.com](https://vercel.com/).
-2. New Project → connect the GitHub repository.
-3. Keep the defaults; Next.js is auto-detected.
-4. Deploy.
+Production deploys run through GitHub Actions (`deploy.yml`) — **not** through Vercel's
+own Git integration. That integration is intentionally disconnected: this repo receives
+commits from agents, and `deploy.yml` is meant to stay the only path to production.
+
+### How it works
+
+- Trigger: every push to `main` — after `quality.yml` passes on that same commit, called
+  via `workflow_call` — or a manual run from the Actions tab. Both are restricted to
+  `main` by the `production` environment's branch rule.
+- The job that holds `VERCEL_TOKEN` runs no code from the repository: no install, no
+  local build, no `vercel pull`. The build happens on Vercel's side; the job only runs
+  `vercel deploy --prod --yes`, and the token is scoped to that one step (absent while
+  the Vercel CLI itself is installed).
+- `VERCEL_TOKEN` is a secret on the `production` **environment**, not a repository
+  secret — project-scoped and time-limited, so only commits on `main` can use it.
+- Deploys queue instead of cancelling (`concurrency: group: vercel-prod,
+  cancel-in-progress: false`): a runner build that got cancelled would keep running on
+  Vercel's side and could still grab the production alias after a newer deploy.
+- No `pull_request`, `pull_request_target` or `workflow_run` trigger — this is a public
+  repo, so production secrets never run against code from a fork.
+
+### Setup
+
+1. Create a Vercel project (`vercel.com` → New Project, import the repo once to obtain
+   `VERCEL_ORG_ID` / `VERCEL_PROJECT_ID` — already set in `deploy.yml`'s `env:` for this
+   repo).
+2. In that Vercel project, disconnect the Git integration (Settings → Git): this repo
+   deploys only through `deploy.yml`.
+3. Create a GitHub **environment** named `production`, restrict it to the `main` branch,
+   and add `VERCEL_TOKEN` there as an environment secret (not a repository secret).
+4. Push to `main`: `quality.yml` runs first, then `deploy.yml` deploys.
+
+Owner: agent-os. Remove this workflow only once another deployment path replaces it.
 
 ## Fly.io
 
